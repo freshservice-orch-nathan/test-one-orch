@@ -1,0 +1,65 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+variables:
+  MajorVersion: 0
+  MinorVersion: 1 #Decide what would be the versions of build names
+  PatchVersion: 0
+
+pr:
+  branches:
+    include:
+    - master
+    - release/*
+
+name: $(MajorVersion).$(MinorVersion).$(PatchVersion).$(Rev:r)
+
+jobs:
+ # Build Development Environment
+ - job: Build_Test
+   pool:
+     vmImage: 'Ubuntu-latest'
+   steps:
+   # Install prerequisites
+   - task: UsePythonVersion@0
+     inputs:
+       versionSpec: 3.x
+       architecture: 'x64'
+   - script: |
+       python -m pip install --upgrade pip setuptools wheel
+       pip install -r requirements.txt
+       pip install unittest-xml-reporting
+     displayName: 'Install prerequisites'
+
+   # Install terraform & Validating terraform code
+   - task: AmazonWebServices.aws-vsts-tools.AWSShellScript.AWSShellScript@1
+     displayName: 'terraform validate'
+     inputs:
+       awsCredentials: devsand_ar
+       regionName: 'us-east-1'
+       scriptType: inline
+       inlineScript: |
+         make install_terraform_linux 
+         make terraform_validate 
+       workingDirectory: '$(System.DefaultWorkingDirectory)/_arun-ae_infra-arun-ADO'
+    
+   # Execute terraform Plan
+   - task: AmazonWebServices.aws-vsts-tools.AWSShellScript.AWSShellScript@1
+     displayName: 'terraform plan'
+     inputs:
+       awsCredentials: devsand_ar
+       regionName: 'us-east-1'
+       scriptType: inline
+       inlineScript: |
+         make terraform_plan
+         make terraform_clean
+       workingDirectory: '$(System.DefaultWorkingDirectory)/_arun-ae_infra-arun-ADO'
+
+   # Publish Artifact
+   - task: PublishBuildArtifacts@1
+     displayName: 'Publish Artifact: infra-Arun-ADO-terraform'
+     inputs:
+       PathtoPublish: '$(Build.SourcesDirectory)'
+       ArtifactName: infra-Arun-ADO-terraform
